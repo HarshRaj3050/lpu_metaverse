@@ -1,12 +1,31 @@
 import { Server } from "socket.io";
 
+const PORT = process.env.PORT || 3001;
+const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:5173";
+
+// Support multiple origins for localhost and production
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:3000",
+  "http://127.0.0.1:5173",
+  "http://127.0.0.1:3000",
+];
+
+// Add production Vercel URL if specified
+if (CLIENT_URL && !allowedOrigins.includes(CLIENT_URL)) {
+  allowedOrigins.push(CLIENT_URL);
+}
+
 const io = new Server({
   cors: {
-    origin: "http://localhost:5173",
+    origin: allowedOrigins,
+    methods: ["GET", "POST"],
+    credentials: true,
   },
 });
 
-io.listen(3001);
+io.listen(PORT);
+console.log(`Server running on port ${PORT}`);
 
 const characters = [];
 const userNames = new Map();

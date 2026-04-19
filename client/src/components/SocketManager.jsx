@@ -2,7 +2,29 @@ import { atom, useAtom } from "jotai";
 import { useEffect } from "react";
 import { io } from "socket.io-client";
 
-export const socket = io("http://localhost:3001");
+// Determine socket URL based on environment
+const getSocketURL = () => {
+  const isDev = window.location.hostname === "localhost" || 
+                window.location.hostname === "127.0.0.1";
+  
+  if (isDev) {
+    return "http://localhost:3001";
+  }
+  
+  // Production: Use Render backend URL
+  // Replace with your actual Render backend URL
+  const backendURL = import.meta.env.VITE_SOCKET_URL || 
+                     "https://lpu-metavese.onrender.com";
+  return backendURL;
+};
+
+export const socket = io(getSocketURL(), {
+  reconnection: true,
+  reconnectionDelay: 1000,
+  reconnectionDelayMax: 5000,
+  reconnectionAttempts: 5,
+});
+
 export const charactersAtom = atom([]);
 export const messagesAtom = atom([]);
 

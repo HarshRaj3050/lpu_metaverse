@@ -8,7 +8,7 @@ import { charactersAtom, socket } from "./SocketManager";
 import { Item } from "./Item";
 
 const MOVE_SPEED = 0.04;
-const CAM_DISTANCE = 10;
+const CAM_DISTANCE = 8;
 const CAM_HEIGHT = 4;
 const CAM_LERP = 0.01;
 
