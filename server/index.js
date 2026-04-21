@@ -20,6 +20,8 @@ const allowedOrigins = [
   "http://localhost:3000",
   "http://127.0.0.1:5173",
   "http://127.0.0.1:3000",
+  "https://lpu-metavese.onrender.com/",
+  "https://lpu-metavese.vercel.app/"
 ];
 
 if (CLIENT_URL && !allowedOrigins.includes(CLIENT_URL)) {
@@ -80,7 +82,7 @@ io.on("connection", async (socket) => {
   socket.on("join-metaverse", async (userData) => {
     try {
       const { username, email } = userData;
-      
+
       if (!username) {
         socket.emit("error", { message: "Username required to join metaverse" });
         return;
@@ -130,16 +132,16 @@ io.on("connection", async (socket) => {
       characters.push(character);
 
       // Send welcome to the user
-      socket.emit("metaverse-joined", { 
-        username, 
+      socket.emit("metaverse-joined", {
+        username,
         character,
         socketId: socket.id,
-        allCharacters: characters 
+        allCharacters: characters
       });
-      
+
       // Broadcast updated character list to all clients
       io.emit("characters", characters);
-      
+
       console.log(`✓ Character created for ${username}`);
 
     } catch (err) {

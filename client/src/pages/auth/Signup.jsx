@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import axios from 'axios'
 
-const BASE_URL = import.meta.env.BASE_URL || "https://lpu-metavese.onrender.com";
+const BASE_URL = import.meta.env.VITE_API_URL || "https://lpu-metavese.onrender.com";
 import Silk from '../../components/animation/Silk'
 
 const Signup = () => {
