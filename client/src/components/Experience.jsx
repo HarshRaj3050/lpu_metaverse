@@ -5,7 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { AnimatedWoman } from "./AnimatedWoman";
 import { charactersAtom, socket } from "./SocketManager";
-import { Item } from "./Item";
+import { BuildingWithCollider } from "./BuildingWithCollider";
+import { Physics, RigidBody, CuboidCollider, CapsuleCollider } from "@react-three/rapier";
 
 const MOVE_SPEED = 5;       // units per second (delta-time based)
 const CAM_DISTANCE = 8;
@@ -29,14 +30,20 @@ function useKeys() {
   return keys;
 }
 
-// ─── Third-person controller ──────────────────────────────────
+// ─── Atom to share the local player's physics position ────────
+// This allows AnimatedWoman to use the physics-driven position
+// instead of the server-echoed position for the local player.
+import { atom } from "jotai";
+export const localPlayerPosAtom = atom(null); // THREE.Vector3 or null
+
+// ─── Third-person controller (physics-based) ──────────────────
 function ThirdPersonController({ characters }) {
   const { camera, gl } = useThree();
   const keys = useKeys();
+  const rigidBodyRef = useRef();
 
-  const yaw = useRef(Math.PI);  // horizontal camera angle
-  const pitch = useRef(0.4);      // vertical camera angle (radians)
-  const charPos = useRef(new THREE.Vector3(0, 0, 0));
+  const yaw = useRef(Math.PI);   // horizontal camera angle
+  const pitch = useRef(0.4);     // vertical camera angle (radians)
   const isLocked = useRef(false);
   const lastEmitTime = useRef(0);
 
@@ -46,6 +53,10 @@ function ThirdPersonController({ characters }) {
   const _move = useRef(new THREE.Vector3());
   const _camTarget = useRef(new THREE.Vector3());
   const _lookAt = useRef(new THREE.Vector3());
+
+
+
+  const [, setLocalPos] = useAtom(localPlayerPosAtom);
 
   // Pointer lock — click canvas to capture mouse
   useEffect(() => {
@@ -73,15 +84,29 @@ function ThirdPersonController({ characters }) {
     };
   }, [gl]);
 
+  // Sync initial position from server data
+  const initialized = useRef(false);
+  useEffect(() => {
+    if (initialized.current) return;
+    const me = characters.find((c) => c.id === socket.id);
+    if (me && rigidBodyRef.current) {
+      rigidBodyRef.current.setTranslation(
+        { x: me.position[0], y: 1, z: me.position[2] },
+        true
+      );
+      initialized.current = true;
+    }
+  }, [characters]);
+
   useFrame((_, delta) => {
+    const rb = rigidBodyRef.current;
+    if (!rb) return;
+
     // Cap delta to avoid huge jumps on tab-switch or lag spikes
     const dt = Math.min(delta, 0.1);
 
-    // Sync local position from server on first load
-    const me = characters.find((c) => c.id === socket.id);
-    if (me && charPos.current.lengthSq() === 0) {
-      charPos.current.set(...me.position);
-    }
+    // Get current position from physics body
+    const pos = rb.translation();
 
     // Direction vectors derived from camera yaw (reuse pre-allocated vectors)
     const forward = _forward.current.set(-Math.sin(yaw.current), 0, -Math.cos(yaw.current));
@@ -94,40 +119,71 @@ function ThirdPersonController({ characters }) {
     if (keys.current["KeyD"] || keys.current["ArrowRight"]) move.add(right);
 
     if (move.lengthSq() > 0) {
-      move.normalize().multiplyScalar(MOVE_SPEED * dt);
-      charPos.current.add(move);
-      // Clamp to floor bounds
-      charPos.current.x = Math.max(-35, Math.min(35, charPos.current.x));
-      charPos.current.z = Math.max(-35, Math.min(35, charPos.current.z));
+      move.normalize().multiplyScalar(MOVE_SPEED);
+      // Set linear velocity — Rapier handles collision resolution automatically
+      rb.setLinvel({ x: move.x, y: rb.linvel().y, z: move.z }, true);
 
       // Throttle socket emissions to avoid flooding the server
       const now = performance.now();
       if (now - lastEmitTime.current >= EMIT_INTERVAL) {
         lastEmitTime.current = now;
-        socket.emit("move", [charPos.current.x, 0, charPos.current.z]);
+        socket.emit("move", [pos.x, 0, pos.z]);
       }
+    } else {
+      // Stop horizontal movement but preserve vertical velocity (gravity)
+      rb.setLinvel({ x: 0, y: rb.linvel().y, z: 0 }, true);
     }
+
+    // Clamp to floor bounds (safety net)
+    if (pos.x < -35 || pos.x > 35 || pos.z < -35 || pos.z > 35) {
+      rb.setTranslation(
+        {
+          x: Math.max(-35, Math.min(35, pos.x)),
+          y: pos.y,
+          z: Math.max(-35, Math.min(35, pos.z)),
+        },
+        true
+      );
+    }
+
+    // Share physics position with AnimatedWoman for the local player
+    setLocalPos(new THREE.Vector3(pos.x, 0, pos.z));
 
     // Camera: spherical orbit around character (reuse vectors)
     const cosP = Math.cos(pitch.current);
     const sinP = Math.sin(pitch.current);
     _camTarget.current.set(
-      charPos.current.x + Math.sin(yaw.current) * CAM_DISTANCE * cosP,
-      charPos.current.y + sinP * CAM_DISTANCE + CAM_HEIGHT * 0.3,
-      charPos.current.z + Math.cos(yaw.current) * CAM_DISTANCE * cosP
+      pos.x + Math.sin(yaw.current) * CAM_DISTANCE * cosP,
+      pos.y + sinP * CAM_DISTANCE + CAM_HEIGHT * 0.3,
+      pos.z + Math.cos(yaw.current) * CAM_DISTANCE * cosP
     );
 
     camera.position.lerp(_camTarget.current, CAM_LERP);
-    _lookAt.current.set(charPos.current.x, charPos.current.y + 1.5, charPos.current.z);
+    _lookAt.current.set(pos.x, pos.y + 1.5, pos.z);
     camera.lookAt(_lookAt.current);
   });
 
-  return null;
+  return (
+    <RigidBody
+      ref={rigidBodyRef}
+      type="dynamic"
+      position={[0, 1, 0]}
+      lockRotations                    // Prevent character from tipping over
+      enabledRotations={[false, false, false]}
+      colliders={false}
+      mass={1}
+      linearDamping={5}                // Slight damping for smoother stops
+    >
+      {/* Capsule collider sized to match the character model */}
+      <CapsuleCollider args={[0.5, 0.3]} position={[0, 0.8, 0]} />
+    </RigidBody>
+  );
 }
 
 // ─── Experience ───────────────────────────────────────────────
 export const Experience = () => {
   const [characters] = useAtom(charactersAtom);
+  const [localPos] = useAtom(localPlayerPosAtom);
   const [onFloor, setOnFloor] = useState(false);
   useCursor(onFloor);
 
@@ -137,29 +193,50 @@ export const Experience = () => {
       <ambientLight intensity={0.3} />
       <ContactShadows blur={2} />
 
-      <Item name={"lpu34"}></Item>
+      {/*
+        Physics world — set debug to see green collider wireframes.
+        Remove `debug` once your colliders are positioned correctly.
+      */}
+      <Physics gravity={[0, -9.81, 0]}>
+        {/* Building with collision walls */}
+        <BuildingWithCollider />
 
-      <ThirdPersonController characters={characters} />
+        {/* Player physics body (invisible — just the collider) */}
+        <ThirdPersonController characters={characters} />
 
-      <mesh
-        rotation-x={-Math.PI / 2}
-        position-y={-0.001}
-        onPointerEnter={() => setOnFloor(true)}
-        onPointerLeave={() => setOnFloor(false)}
-      >
-        <planeGeometry args={[70, 70]} />
-        <meshStandardMaterial color="#f0f0f0" />
-      </mesh>
+        {/* Floor as a static rigid body */}
+        <RigidBody type="fixed" colliders={false}>
+          <CuboidCollider args={[35, 0.01, 35]} position={[0, -0.001, 0]} />
+          <mesh
+            rotation-x={-Math.PI / 2}
+            position-y={-0.001}
+            onPointerEnter={() => setOnFloor(true)}
+            onPointerLeave={() => setOnFloor(false)}
+          >
+            <planeGeometry args={[70, 70]} />
+            <meshStandardMaterial color="#f0f0f0" />
+          </mesh>
+        </RigidBody>
+      </Physics>
 
-      {characters.map((character) => (
-        <AnimatedWoman
-          key={character.id}
-          position={new THREE.Vector3(...character.position)}
-          hairColor={character.hairColor}
-          topColor={character.topColor}
-          bottomColor={character.bottomColor}
-        />
-      ))}
+      {/* Character models (rendered OUTSIDE physics, they follow positions) */}
+      {characters.map((character) => {
+        const isLocalPlayer = character.id === socket.id;
+        // Local player uses physics position; remote players use server data
+        const position = isLocalPlayer && localPos
+          ? localPos
+          : new THREE.Vector3(...character.position);
+
+        return (
+          <AnimatedWoman
+            key={character.id}
+            position={position}
+            hairColor={character.hairColor}
+            topColor={character.topColor}
+            bottomColor={character.bottomColor}
+          />
+        );
+      })}
     </>
   );
 };
