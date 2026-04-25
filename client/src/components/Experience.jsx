@@ -8,10 +8,10 @@ import { charactersAtom, socket } from "./SocketManager";
 import { BuildingWithCollider } from "./BuildingWithCollider";
 import { Physics, RigidBody, CuboidCollider, CapsuleCollider } from "@react-three/rapier";
 
-const MOVE_SPEED = 5;       // units per second (delta-time based)
+const MOVE_SPEED = 6;       // units per second (delta-time based)
 const CAM_DISTANCE = 8;
 const CAM_HEIGHT = 4;
-const CAM_LERP = 0.1;       // much smoother camera follow
+const CAM_LERP = 0.9;       // much smoother camera follow
 const EMIT_INTERVAL = 50;   // ms between socket emits (~20 updates/sec)
 
 // ─── Keyboard hook ────────────────────────────────────────────
