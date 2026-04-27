@@ -2,7 +2,7 @@
 
 A real-time, multiplayer 3D metaverse application built with React Three Fiber, Express, and Socket.io. Users can create accounts, authenticate via email, and interact with other players in a 3D virtual environment with voice/video communication.
 
-Video explain - https://www.linkedin.com/in/harshraj3050/
+Video explain - https://www.linkedin.com/posts/harshraj3050_webdevelopment-metaverse-lpu-ugcPost-7454263692059377665-u-QT
 
 ![Project Status](https://img.shields.io/badge/status-active-brightgreen)
 ![Node Version](https://img.shields.io/badge/node-16%2B-blue)
