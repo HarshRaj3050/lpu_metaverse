@@ -20,6 +20,30 @@ async function userRegister(req, res) {
     });
 
     if (isUserExist) {
+        if (!isUserExist.verified) {
+            const otp = emailService.generateOtp();
+            const html = emailService.getOtpHtml(otp);
+            const otpHash = bcrypt.hashSync(otp, 10);
+            
+            await otpModel.deleteMany({ email });
+            await otpModel.create({
+                email,
+                user: isUserExist._id,
+                otpHash
+            });
+
+            await sendEmail(email, 'OTP Verification', `Your OTP Code is ${otp}`, html);
+
+            return res.status(200).json({
+                message: 'User registered successfully',
+                user: {
+                    id: isUserExist._id,
+                    username: isUserExist.username,
+                    email: isUserExist.email,
+                    verified: isUserExist.verified
+                }
+            });
+        }
         return res.status(409).json({ message: 'User already exists' });
     }
 
@@ -141,4 +165,37 @@ async function logoutUser(req, res) {
     res.status(200).json({ message: "user logged out successfully" })
 }
 
-module.exports = { userRegister, verifyEmail, userLogin, logoutUser }
+async function resendVerificationEmail(req, res) {
+    const { email } = req.body;
+
+    if (!email) {
+        return res.status(400).json({ message: 'Email is required' });
+    }
+
+    const user = await userModel.findOne({ email });
+
+    if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (user.verified) {
+        return res.status(400).json({ message: 'Email already verified' });
+    }
+
+    const otp = emailService.generateOtp();
+    const html = emailService.getOtpHtml(otp);
+
+    const otpHash = bcrypt.hashSync(otp, 10);
+    await otpModel.deleteMany({ email });
+    await otpModel.create({
+        email,
+        user: user._id,
+        otpHash
+    });
+
+    await sendEmail(email, 'OTP Verification', `Your OTP Code is ${otp}`, html);
+
+    return res.status(200).json({ message: 'Verification email resent successfully' });
+}
+
+module.exports = { userRegister, verifyEmail, userLogin, logoutUser, resendVerificationEmail }

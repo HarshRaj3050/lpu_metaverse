@@ -6,10 +6,10 @@ router.post("/register",  authController.userRegister);
 
 router.post("/verify-email", authController.verifyEmail);
 
+router.post("/resendVerificationEmail", authController.resendVerificationEmail);
+
 router.post("/login", authController.userLogin);
 
 router.post("/logout", authController.logoutUser);
-
-
 
 module.exports = router;
