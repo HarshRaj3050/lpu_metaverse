@@ -7,157 +7,172 @@ const otpModel = require('../models/otp.model');
 
 
 async function userRegister(req, res) {
-    const { email, password, username } = req.body;
+    try {
+        const { email, password, username } = req.body;
 
-    if (!email || !password || !username) {
-        return res.status(400).json({ message: 'Missing required fields' });
-    }
-
-    const isUserExist = await userModel.findOne({
-        $or: [
-            { email }
-        ]
-    });
-
-    if (isUserExist) {
-        if (!isUserExist.verified) {
-            const otp = emailService.generateOtp();
-            const html = emailService.getOtpHtml(otp);
-            const otpHash = bcrypt.hashSync(otp, 10);
-            
-            await otpModel.deleteMany({ email });
-            await otpModel.create({
-                email,
-                user: isUserExist._id,
-                otpHash
-            });
-
-            await sendEmail(email, 'OTP Verification', `Your OTP Code is ${otp}`, html);
-
-            return res.status(200).json({
-                message: 'User registered successfully',
-                user: {
-                    id: isUserExist._id,
-                    username: isUserExist.username,
-                    email: isUserExist.email,
-                    verified: isUserExist.verified
-                }
-            });
+        if (!email || !password || !username) {
+            return res.status(400).json({ message: 'Missing required fields' });
         }
-        return res.status(409).json({ message: 'User already exists' });
-    }
 
-    const hashPass = bcrypt.hashSync(password, 10);
+        const isUserExist = await userModel.findOne({
+            $or: [
+                { email }
+            ]
+        });
 
-    const user = await userModel.create({
-        username,
-        email,
-        password: hashPass
-    });
+        if (isUserExist) {
+            if (!isUserExist.verified) {
+                const otp = emailService.generateOtp();
+                const html = emailService.getOtpHtml(otp);
+                const otpHash = bcrypt.hashSync(otp, 10);
+                
+                await otpModel.deleteMany({ email });
+                await otpModel.create({
+                    email,
+                    user: isUserExist._id,
+                    otpHash
+                });
 
-    const otp = emailService.generateOtp();
-    const html = emailService.getOtpHtml(otp);
+                await sendEmail(email, 'OTP Verification', `Your OTP Code is ${otp}`, html);
 
-    const otpHash = bcrypt.hashSync(otp, 10);
-    await otpModel.create({
-        email,
-        user: user._id,
-        otpHash
-    });
-
-    await sendEmail(email, 'OTP Verification', `Your OTP Code is ${otp}`, html);
-
-    res.status(201).json({
-        message: 'User registered successfully',
-        user: {
-            id: user._id,
-            username: user.username,
-            email: user.email,
-            verified: user.verified
+                return res.status(200).json({
+                    message: 'User registered successfully',
+                    user: {
+                        id: isUserExist._id,
+                        username: isUserExist.username,
+                        email: isUserExist.email,
+                        verified: isUserExist.verified
+                    }
+                });
+            }
+            return res.status(409).json({ message: 'User already exists' });
         }
-    });
+
+        const hashPass = bcrypt.hashSync(password, 10);
+
+        const user = await userModel.create({
+            username,
+            email,
+            password: hashPass
+        });
+
+        const otp = emailService.generateOtp();
+        const html = emailService.getOtpHtml(otp);
+
+        const otpHash = bcrypt.hashSync(otp, 10);
+        await otpModel.create({
+            email,
+            user: user._id,
+            otpHash
+        });
+
+        await sendEmail(email, 'OTP Verification', `Your OTP Code is ${otp}`, html);
+
+        res.status(201).json({
+            message: 'User registered successfully',
+            user: {
+                id: user._id,
+                username: user.username,
+                email: user.email,
+                verified: user.verified
+            }
+        });
+    } catch (error) {
+        console.error("Register Error:", error);
+        res.status(500).json({ message: 'Internal server error during registration', error: error.message });
+    }
 }
 
 
 async function verifyEmail(req, res) {
-    const { otp, email } = req.body;
+    try {
+        const { otp, email } = req.body;
 
-    if (!otp || !email) {
-        return res.status(400).json({ message: 'OTP and email are required' });
+        if (!otp || !email) {
+            return res.status(400).json({ message: 'OTP and email are required' });
+        }
+
+        const otpDoc = await otpModel.findOne({ email }).sort({ createdAt: -1 });
+
+        if (!otpDoc) {
+            return res.status(400).json({ message: 'Invalid or expired OTP' });
+        }
+
+        const match = await bcrypt.compare(otp, otpDoc.otpHash);
+        if (!match) {
+            return res.status(400).json({ message: 'Invalid OTP' });
+        }
+
+        const user = await userModel.findByIdAndUpdate(otpDoc.user, { verified: true }, { new: true });
+
+        await otpModel.deleteMany({ user: otpDoc.user });
+
+        const userId = user._id;
+        
+
+        return res.status(200).json({
+            message: 'Email verified successfully',
+            user: {
+                username: user.username,
+                email: user.email,
+                verified: user.verified
+            },
+        });
+    } catch (error) {
+        console.error("Verify Email Error:", error);
+        res.status(500).json({ message: 'Internal server error during email verification', error: error.message });
     }
-
-    const otpDoc = await otpModel.findOne({ email }).sort({ createdAt: -1 });
-
-    if (!otpDoc) {
-        return res.status(400).json({ message: 'Invalid or expired OTP' });
-    }
-
-    const match = await bcrypt.compare(otp, otpDoc.otpHash);
-    if (!match) {
-        return res.status(400).json({ message: 'Invalid OTP' });
-    }
-
-    const user = await userModel.findByIdAndUpdate(otpDoc.user, { verified: true }, { new: true });
-
-    await otpModel.deleteMany({ user: otpDoc.user });
-
-    const userId = user._id;
-    
-
-    return res.status(200).json({
-        message: 'Email verified successfully',
-        user: {
-            username: user.username,
-            email: user.email,
-            verified: user.verified
-        },
-    });
 }
 
 
 async function userLogin(req, res) {
-    const { email, password } = req.body;
+    try {
+        const { email, password } = req.body;
 
-    if (!email || !password) {
-        return res.status(400).json({ message: 'Username and password are required' });
-    }
-
-    const user = await userModel.findOne({ email });
-
-    if (!user) {
-        return res.status(404).json({ message: 'User not found' });
-    }
-
-    const isValid = await bcrypt.compare(password, user.password);
-    if (!isValid) {
-        return res.status(401).json({ message: 'Invalid credentials' });
-    }
-
-    if (!user.verified) {
-        return res.status(403).json({ message: 'Email not verified' });
-    }
-
-    const token = jwt.sign(
-        { id: user?._id },
-        process.env.JWT_SECRET,
-        { expiresIn: '24h' }
-    );
-
-    res.cookie("token", token, {
-        httpOnly: true,
-        sameSite: "none",
-        secure: true
-    });
-    
-    res.status(200).json({
-        message: 'Login successful',
-        token,
-        user: {
-            id: user._id,
-            username: user.username,
-            email: user.email
+        if (!email || !password) {
+            return res.status(400).json({ message: 'Username and password are required' });
         }
-    });
+
+        const user = await userModel.findOne({ email });
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        const isValid = await bcrypt.compare(password, user.password);
+        if (!isValid) {
+            return res.status(401).json({ message: 'Invalid credentials' });
+        }
+
+        if (!user.verified) {
+            return res.status(403).json({ message: 'Email not verified' });
+        }
+
+        const token = jwt.sign(
+            { id: user?._id },
+            process.env.JWT_SECRET,
+            { expiresIn: '24h' }
+        );
+
+        res.cookie("token", token, {
+            httpOnly: true,
+            sameSite: "none",
+            secure: true
+        });
+        
+        res.status(200).json({
+            message: 'Login successful',
+            token,
+            user: {
+                id: user._id,
+                username: user.username,
+                email: user.email
+            }
+        });
+    } catch (error) {
+        console.error("Login Error:", error);
+        res.status(500).json({ message: 'Internal server error during login', error: error.message });
+    }
 }
 
 async function logoutUser(req, res) {
@@ -166,36 +181,41 @@ async function logoutUser(req, res) {
 }
 
 async function resendVerificationEmail(req, res) {
-    const { email } = req.body;
+    try {
+        const { email } = req.body;
 
-    if (!email) {
-        return res.status(400).json({ message: 'Email is required' });
+        if (!email) {
+            return res.status(400).json({ message: 'Email is required' });
+        }
+
+        const user = await userModel.findOne({ email });
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        if (user.verified) {
+            return res.status(400).json({ message: 'Email already verified' });
+        }
+
+        const otp = emailService.generateOtp();
+        const html = emailService.getOtpHtml(otp);
+
+        const otpHash = bcrypt.hashSync(otp, 10);
+        await otpModel.deleteMany({ email });
+        await otpModel.create({
+            email,
+            user: user._id,
+            otpHash
+        });
+
+        await sendEmail(email, 'OTP Verification', `Your OTP Code is ${otp}`, html);
+
+        return res.status(200).json({ message: 'Verification email resent successfully' });
+    } catch (error) {
+        console.error("Resend Verification Error:", error);
+        res.status(500).json({ message: 'Internal server error during resending verification email', error: error.message });
     }
-
-    const user = await userModel.findOne({ email });
-
-    if (!user) {
-        return res.status(404).json({ message: 'User not found' });
-    }
-
-    if (user.verified) {
-        return res.status(400).json({ message: 'Email already verified' });
-    }
-
-    const otp = emailService.generateOtp();
-    const html = emailService.getOtpHtml(otp);
-
-    const otpHash = bcrypt.hashSync(otp, 10);
-    await otpModel.deleteMany({ email });
-    await otpModel.create({
-        email,
-        user: user._id,
-        otpHash
-    });
-
-    await sendEmail(email, 'OTP Verification', `Your OTP Code is ${otp}`, html);
-
-    return res.status(200).json({ message: 'Verification email resent successfully' });
 }
 
 module.exports = { userRegister, verifyEmail, userLogin, logoutUser, resendVerificationEmail }
