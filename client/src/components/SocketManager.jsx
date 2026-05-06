@@ -13,7 +13,7 @@ const getSocketURL = () => {
   
   // Production: Use Render backend URL
   const backendURL = import.meta.env.VITE_SOCKET_URL || 
-                     "https://lpu-metavese.onrender.com";
+                     "https://lpu-metaverse.onrender.com";
   return backendURL;
 };
 

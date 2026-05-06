@@ -12,7 +12,7 @@ const getTokenServerURL = () => {
     window.location.hostname === "localhost" ||
     window.location.hostname === "127.0.0.1";
   if (isDev) return "http://localhost:3001";
-  return import.meta.env.VITE_API_URL || "https://lpu-metavese.onrender.com";
+  return import.meta.env.VITE_API_URL || "https://lpu-metaverse.onrender.com";
 };
 
 // Create the Agora RTC client once (singleton)
