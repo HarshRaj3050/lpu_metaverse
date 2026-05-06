@@ -33,15 +33,17 @@ if(!process.env.EMAIL_PASS){
     throw new Error("EMAIL_PASS is not defined in environment variable");
 }
 
+const stripQuotes = (val) => val ? val.replace(/^['"]|['"]$/g, '') : val;
+
 const config = {
-    MONGO_URI: process.env.MONGO_URI || process.env.MONGO_URI,
-    JWT_SECRET: process.env.JWT_SECRET,
-    GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
-    GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
-    GOOGLE_REFRESH_TOKEN: process.env.GOOGLE_REFRESH_TOKEN,
-    GOOGLE_USER: process.env.GOOGLE_USER,
-    EMAIL_USER: process.env.EMAIL_USER,
-    EMAIL_PASS: process.env.EMAIL_PASS
+    MONGO_URI: stripQuotes(process.env.MONGO_URI),
+    JWT_SECRET: stripQuotes(process.env.JWT_SECRET),
+    GOOGLE_CLIENT_ID: stripQuotes(process.env.GOOGLE_CLIENT_ID),
+    GOOGLE_CLIENT_SECRET: stripQuotes(process.env.GOOGLE_CLIENT_SECRET),
+    GOOGLE_REFRESH_TOKEN: stripQuotes(process.env.GOOGLE_REFRESH_TOKEN),
+    GOOGLE_USER: stripQuotes(process.env.GOOGLE_USER),
+    EMAIL_USER: stripQuotes(process.env.EMAIL_USER),
+    EMAIL_PASS: stripQuotes(process.env.EMAIL_PASS)
 }
 
 module.exports = config;
